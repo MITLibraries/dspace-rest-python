@@ -140,7 +140,8 @@ class DSpaceObject(AddressableHALResource):
             self.lastModified = api_resource.get('lastModified')
             # Python interprets _ prefix as private so for now, renaming this and handling it separately
             # alternatively - each item could implement getters, or a public method to return links
-            self.links = api_resource.get('_links', {}).copy()
+            if '_links' in api_resource:
+                self.links = api_resource.get('_links', {}).copy()
 
     def get_metadata_values(self, field):
         """
