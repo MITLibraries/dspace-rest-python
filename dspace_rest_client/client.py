@@ -222,6 +222,7 @@ class DSpaceClient:
         solr_auth=SOLR_AUTH,
         fake_user_agent=False,
         proxies=PROXY_DICT,
+        request_header_mixins=None,
     ):
         """
         Accept optional API endpoint, username, password arguments using the OS environment
@@ -230,6 +231,9 @@ class DSpaceClient:
         :param username:        username with appropriate privileges to perform operations on
                                 REST API
         :param password:        password for the above username
+        :param request_header_mixins: optional dict of headers to include in every REST API
+                                request, eg. {"X-Foo": "bar"}. These take precedence over
+                                the default headers.
         """
         self.session = requests.Session()
         self.api_token = read_personal_api_token_secret()
@@ -252,15 +256,21 @@ class DSpaceClient:
                 "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/39.0.2171.95 Safari/537.36"
             )
-        # Set headers based on this
-        self.auth_request_headers = {"User-Agent": self.USER_AGENT}
+        # Set headers based on this, with any mixins applied last so they take precedence
+        self.request_header_mixins = dict(request_header_mixins or {})
+        self.auth_request_headers = {
+            "User-Agent": self.USER_AGENT,
+            **self.request_header_mixins,
+        }
         self.request_headers = {
             "Content-type": "application/json",
             "User-Agent": self.USER_AGENT,
+            **self.request_header_mixins,
         }
         self.list_request_headers = {
             "Content-type": "text/uri-list",
             "User-Agent": self.USER_AGENT,
+            **self.request_header_mixins,
         }
 
     def authenticate(self, retry=False):
@@ -381,13 +391,13 @@ class DSpaceClient:
         @param url:     DSpace REST API URL
         @param params:  any parameters to include (eg ?page=0)
         @param data:    any data to supply (typically not relevant for GET)
-        @param headers: any override headers (eg. with short-lived token for download)
+        @param headers: optional headers, merged over the default request headers
+                        (eg. with short-lived token for download)
         @return:        Response from API
         """
-        if headers is None:
-            headers = self.request_headers
+        request_headers = {**self.request_headers, **(headers or {})}
         r = self.session.get(url, params=params, data=data,
-                             headers=headers, 
+                             headers=request_headers,
                              proxies=self.proxies
                              )
         self.update_token(r)
@@ -997,11 +1007,7 @@ class DSpaceClient:
         @return: full response object including headers, and content
         """
         url = f"{self.API_ENDPOINT}/core/bitstreams/{uuid}/content"
-        h = {
-            **self.request_headers,
-            "Authorization": self.get_short_lived_token(),
-        }
-        r = self.api_get(url, headers=h)
+        r = self.api_get(url, headers={"Authorization": self.get_short_lived_token()})
         if r.status_code == 200:
             return r
 
